@@ -10,7 +10,7 @@ features I want to implement:
 
 ## Progress
 - [x] Lexer
-- [ ] Parser
+- [x] Parser
 - [ ] Execute simple commands
 - [ ] Handle input and output redirection
 - [ ] Handle pipes

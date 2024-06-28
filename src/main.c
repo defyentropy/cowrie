@@ -20,14 +20,44 @@ int main(void)
     Parser parser;
     parser.start = tokens;
     parser.current = tokens;
-    SimpleCmd test_cmd = parse_simple_cmd(&parser);
 
-    char **arg = test_cmd.args;
-    while (*arg != NULL)
+    CmdList parsed_cmds = parse_cmd_list(&parser);
+
+    for (size_t i = 0; i < parsed_cmds.cmd_count; i++)
     {
-        printf("%s\n", *arg);
-        arg++;
+        puts("*-- piped list of commands --*");
+
+        for (size_t j = 0; j < parsed_cmds.pipes[i].cmd_count; j++)
+        {
+            puts("*-- command --*");
+
+            char **arg = parsed_cmds.pipes[i].cmds[j].args;
+
+            while (*arg != NULL)
+            {
+                printf("%s ", *arg);
+                arg++;
+            }
+            puts("");
+            printf("infile: %s\n", parsed_cmds.pipes[i].cmds[j].infile);
+            printf("outfile: %s\n", parsed_cmds.pipes[i].cmds[j].outfile);
+        }
+
+        printf("is bg: %d\n", parsed_cmds.pipes[i].bg);
     }
+
+
+    for (size_t i = 0; i < parsed_cmds.cmd_count; i++)
+    {
+        for (size_t j = 0; j < parsed_cmds.pipes[i].cmd_count; j++)
+        {
+            free(parsed_cmds.pipes[i].cmds[j].args);
+        }
+        
+        free(parsed_cmds.pipes[i].cmds);
+    }
+
+    free(parsed_cmds.pipes);
 
     free(tokens[0].start);
     free(tokens);
