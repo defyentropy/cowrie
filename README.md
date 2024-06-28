@@ -9,7 +9,7 @@ features I want to implement:
 2. [COMP 530 @ UNC](https://www.cs.unc.edu/~porter/courses/comp530/f23/lab1.html)
 
 ## Progress
-- [ ] Lexer
+- [x] Lexer
 - [ ] Parser
 - [ ] Execute simple commands
 - [ ] Handle input and output redirection
