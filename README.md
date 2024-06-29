@@ -11,7 +11,7 @@ features I want to implement:
 ## Progress
 - [x] Lexer
 - [x] Parser
-- [ ] Execute simple commands
+- [x] Execute simple commands
 - [ ] Handle input and output redirection
 - [ ] Handle pipes
 - [ ] Add scripting support

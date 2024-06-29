@@ -3,6 +3,7 @@
 #include <string.h>
 #include "../include/lexer.h"
 
+// fast-forwards the parser through whitespace
 static void skip_whitespace(Lexer *lexer)
 {
     while (*(lexer->current) == ' ' || *(lexer->current) == '\t')
@@ -13,7 +14,15 @@ static void skip_whitespace(Lexer *lexer)
 
 static int is_special_char(char c)
 {
-    if (c == ' ' || c == '|' || c == '>' || c == '<' || c == '&' || c == '\0')
+    if (
+        c == ' ' || 
+        c == '|' || 
+        c == '>' || 
+        c == '<' || 
+        c == '&' || 
+        c == '\0' ||
+        c == ';'
+    )
     {
         return 1;
     }
@@ -21,13 +30,13 @@ static int is_special_char(char c)
     return 0;
 }
 
+// lexes a single token from the cmd input buffer
 static Token lex_token(Lexer *lexer)
 {
     skip_whitespace(lexer);
 
-    lexer->start = lexer->current;
     Token new_token;
-    new_token.start = lexer->start;
+    new_token.start = lexer->current;
 
     switch (*(lexer->current))
     {
@@ -76,14 +85,20 @@ static Token lex_token(Lexer *lexer)
     return new_token;
 }
 
+// lexes a full line of command input
 Token *lex_line(char *cmd_buf)
 {
     Lexer lexer;
     lexer.current = cmd_buf;
-    lexer.start = cmd_buf;
 
     size_t token_buf_size = 32;
     Token *token_buf = calloc(token_buf_size, sizeof(Token));
+    if (token_buf == NULL)
+    {
+        perror("cowrie: allocation error");
+        exit(EXIT_FAILURE);
+    }
+
     int token_count = 0;
 
     while (*lexer.current != '\0')
@@ -94,6 +109,14 @@ Token *lex_line(char *cmd_buf)
         {
             token_buf_size *= 2;
             token_buf = reallocarray(token_buf, token_buf_size, sizeof(Token));
+            
+            if (token_buf == NULL)
+            {
+                perror("cowrie: allocation error");
+                exit(EXIT_FAILURE);
+            }
+
+
         }
     }
 
@@ -103,8 +126,12 @@ Token *lex_line(char *cmd_buf)
     return token_buf;
 }
 
+// copy individual lexemes into a new array of null-terminated strings,
+// so pointers to them can be passed into execvp when the time comes for
+// command execution
 void sanitise_cmds(Token *tokens)
 {
+    // calculate exactly how many bytes will be needed
     size_t san_cmd_buf_size = 0;
     Token *current = tokens;
     while (current->type != TOKEN_END)
@@ -114,8 +141,15 @@ void sanitise_cmds(Token *tokens)
     }
 
     char *san_cmd_buf = malloc(san_cmd_buf_size * sizeof(char));
+    if (san_cmd_buf == NULL)
+    {
+        perror("cowrie: allocation error");
+        exit(EXIT_FAILURE);
+    }
+
     char *san_token_ptr = san_cmd_buf;
 
+    // copy lexemes into new buffer and add a null-terminator to each one
     current = tokens;
     while (current->type != TOKEN_END)
     {
