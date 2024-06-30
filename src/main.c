@@ -1,9 +1,24 @@
+#include <setjmp.h>
+#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include "../include/lexer.h"
 #include "../include/parser.h"
 #include "../include/shell.h"
+
+static sigjmp_buf env;
+static volatile sig_atomic_t jump_active = 0;
+
+void print_prompt();
+void sigint_handler(int sig_no)
+{
+    if (!jump_active)
+    {
+        return;
+    }
+    siglongjmp(env, 19);
+}
 
 int main(void)
 {
@@ -12,42 +27,21 @@ int main(void)
     ssize_t chars_read;
     Token *tokens;
 
+    struct sigaction sa;
+    sa.sa_handler = sigint_handler;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = SA_RESTART;
+    sigaction(SIGINT, &sa, NULL);
+
     while (1)
     {
-        size_t prompt_size = 128;
-        char *prompt = malloc(prompt_size * sizeof(char));
-        if (prompt == NULL)
+        if (sigsetjmp(env, 1) == 19)
         {
-            perror("cowrie: allocation error");
-            exit(EXIT_FAILURE);
+            puts("");
         }
+        jump_active = 1;
 
-        do
-        {
-            if (getcwd(prompt, prompt_size) != NULL)
-            {
-                break;
-            }
-            else
-            {
-                prompt_size *= 2;
-                prompt = malloc(prompt_size * (sizeof(char)));
-                if (prompt == NULL)
-                {
-                    perror("cowrie: allocation error");
-                    exit(EXIT_FAILURE);
-                }
-            }
-        } while (prompt_size < 1024);
-
-        if (prompt == NULL)
-        {
-            printf("cowrie$ ");
-        }
-        else
-        {
-            printf("%s$ ", prompt);
-        }
+        print_prompt();
 
         chars_read = getline(&cmd_buf, &cmd_buf_size, stdin);
         // handle errors in getline
@@ -72,6 +66,7 @@ int main(void)
             cmd_buf = NULL;
             continue;
         }
+
         cmd_buf[--chars_read] = '\0';
 
         // split into tokens, write tokens into new array for execvp call,
@@ -97,7 +92,7 @@ int main(void)
 
         for (size_t i = 0; i < parsed_cmds->cmd_count; i++)
         {
-            int status = exec_prog(parsed_cmds->pipes[i]->cmds[0]->args);
+            int status = exec_cmd(parsed_cmds->pipes[i]->cmds[0]->args);
         }
         puts("");
 
@@ -141,4 +136,44 @@ int main(void)
         free(tokens);
     }
     return 0;
+}
+
+
+void print_prompt()
+{
+
+    size_t prompt_size = 128;
+    char *prompt = malloc(prompt_size * sizeof(char));
+    if (prompt == NULL)
+    {
+        perror("cowrie: allocation error");
+        exit(EXIT_FAILURE);
+    }
+
+    do
+    {
+        if (getcwd(prompt, prompt_size) != NULL)
+        {
+            break;
+        }
+        else
+        {
+            prompt_size *= 2;
+            prompt = malloc(prompt_size * (sizeof(char)));
+            if (prompt == NULL)
+            {
+                perror("cowrie: allocation error");
+                exit(EXIT_FAILURE);
+            }
+        }
+    } while (prompt_size < 1024);
+
+    if (prompt == NULL)
+    {
+        printf("cowrie$ ");
+    }
+    else
+    {
+        printf("%s$ ", prompt);
+    }
 }
