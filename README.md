@@ -12,8 +12,8 @@ features I want to implement:
 - [x] Lexer
 - [x] Parser
 - [x] Execute simple commands
-- [ ] Handle input and output redirection
-- [ ] Handle pipes
+- [x] Handle input and output redirection
+- [x] Handle pipes
 - [ ] Add scripting support
 - [ ] Job control
 - [ ] Managing environment variables

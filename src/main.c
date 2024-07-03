@@ -7,18 +7,11 @@
 #include "../include/parser.h"
 #include "../include/shell.h"
 
-static sigjmp_buf env;
+static sigjmp_buf sigint_env;
 static volatile sig_atomic_t jump_active = 0;
 
 void print_prompt();
-void sigint_handler(int sig_no)
-{
-    if (!jump_active)
-    {
-        return;
-    }
-    siglongjmp(env, 19);
-}
+void sigint_handler(int sig_no);
 
 int main(void)
 {
@@ -27,6 +20,7 @@ int main(void)
     ssize_t chars_read;
     Token *tokens;
 
+    // set up signal handler for SIGINT
     struct sigaction sa;
     sa.sa_handler = sigint_handler;
     sigemptyset(&sa.sa_mask);
@@ -35,7 +29,8 @@ int main(void)
 
     while (1)
     {
-        if (sigsetjmp(env, 1) == 19)
+        // set jump point for ^C interrupt handler
+        if (sigsetjmp(sigint_env, 1) == 19)
         {
             puts("");
         }
@@ -43,8 +38,8 @@ int main(void)
 
         print_prompt();
 
+        // get command line input and handle errors and empty inputs
         chars_read = getline(&cmd_buf, &cmd_buf_size, stdin);
-        // handle errors in getline
         if (chars_read == -1)
         {
             if (feof(stdin))
@@ -58,7 +53,6 @@ int main(void)
                 exit(EXIT_FAILURE);
             }
         }
-        // handle empty inputs
         else if (chars_read == 1)
         {
 
@@ -85,14 +79,19 @@ int main(void)
         if (parsed_cmds == NULL)
         {
             printf("cowrie: parse error near '%s'\n", parser.current->start);
-            free(tokens[0].start);
-            free(tokens);
             exit(EXIT_FAILURE);
         }
 
         for (size_t i = 0; i < parsed_cmds->cmd_count; i++)
         {
-            int status = exec_cmd(parsed_cmds->pipes[i]->cmds[0]->args);
+            if (parsed_cmds->pipes[i]->cmd_count > 1)
+            {
+                int status = exec_pipeline(parsed_cmds->pipes[i]);
+            }
+            else
+            {
+                int status = exec_cmd(parsed_cmds->pipes[i]->cmds[0]);
+            }
         }
         puts("");
 
@@ -120,21 +119,34 @@ int main(void)
         } */
 
 
+        // free the copious amounts of allocs i've made
         for (size_t i = 0; i < parsed_cmds->cmd_count; i++)
         {
             for (size_t j = 0; j < parsed_cmds->pipes[i]->cmd_count; j++)
             {
+                // free all the pointers to a cmd's args
                 free(parsed_cmds->pipes[i]->cmds[j]->args);
+                // free each cmd structure
+                free(parsed_cmds->pipes[i]->cmds[j]);
             }
 
+            // free all the pointers to a pipelines cmds
             free(parsed_cmds->pipes[i]->cmds);
+            // free each pipeline structure itself
+            free(parsed_cmds->pipes[i]);
         }
 
+        // free all the pointers to a cmd lists's pipelines
         free(parsed_cmds->pipes);
+        // free the cmd list structure itself
+        free(parsed_cmds);
 
+        // free the buffer of lexemes
         free(tokens[0].start);
+        // free the buffer of pointers to the lexemes
         free(tokens);
     }
+
     return 0;
 }
 
@@ -152,6 +164,10 @@ void print_prompt()
 
     do
     {
+        // getcwd returns NULL if the buffer provided is not big enough to
+        // hold the entire directory path. In this case, the buffer is 
+        // reallocated until it reaches a size of 1024 bytes, at which 
+        // point cowrie gives up and uses the default prompt
         if (getcwd(prompt, prompt_size) != NULL)
         {
             break;
@@ -166,7 +182,7 @@ void print_prompt()
                 exit(EXIT_FAILURE);
             }
         }
-    } while (prompt_size < 1024);
+    } while (prompt_size <= 1024);
 
     if (prompt == NULL)
     {
@@ -176,4 +192,16 @@ void print_prompt()
     {
         printf("%s$ ", prompt);
     }
+
+    free(prompt);
+}
+
+
+void sigint_handler(int sig_no)
+{
+    if (!jump_active)
+    {
+        return;
+    }
+    siglongjmp(sigint_env, 19);
 }
